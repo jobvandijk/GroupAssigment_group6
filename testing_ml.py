@@ -6,10 +6,11 @@ from sklearn.metrics import classification_report, roc_auc_score, confusion_matr
 from imblearn.over_sampling import SMOTE
 
 # Load the dataset
-data = pd.read_csv('/mnt/data/tested_molecular_desc.csv')
-
+data = pd.read_csv('tested_molecular_desc.csv')
+# Drop rows with NaN values
+data = data.dropna(axis=1)
 # Split the data into features and targets
-X = data.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
+X = data.drop(columns=['SMILES','PKM2_inhibition', 'ERK2_inhibition'])
 y_PKM2 = data['PKM2_inhibition']
 y_ERK2 = data['ERK2_inhibition']
 
@@ -55,7 +56,7 @@ print(classification_report(y_test_ERK2, y_pred_ERK2))
 print("ERK2 ROC AUC Score:", roc_auc_score(y_test_ERK2, y_pred_ERK2))
 
 # Load untested molecules
-untested_molecules = pd.read_csv('/mnt/data/untested_molecules.csv')
+untested_molecules = pd.read_csv('untested_molecules-3.csv')
 X_untested = untested_molecules.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
 
 # Make predictions on untested molecules
@@ -63,5 +64,5 @@ untested_molecules['PKM2_inhibition'] = best_model_PKM2.predict(X_untested)
 untested_molecules['ERK2_inhibition'] = best_model_ERK2.predict(X_untested)
 
 # Save predictions to a CSV file
-untested_molecules.to_csv('/mnt/data/untested_molecules_predictions.csv', index=False)
+untested_molecules.to_csv('ml_new_predictions.csv', index=False)
 
