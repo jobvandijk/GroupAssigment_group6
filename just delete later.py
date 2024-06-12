@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn import metrics
 
 # Load the dataset
 tested_data = pd.read_csv('sorted_tested_molecules.csv')
@@ -34,6 +35,7 @@ y_pred_PKM2 = lr_model_PKM2.predict(X_test_PKM2)
 print("PKM2 Linear Regression Metrics")
 print("Mean Squared Error:", mean_squared_error(y_test_PKM2, y_pred_PKM2))
 print("R2 Score:", r2_score(y_test_PKM2, y_pred_PKM2))
+
 
 # Evaluate the model for ERK2
 y_pred_ERK2 = lr_model_ERK2.predict(X_test_ERK2)

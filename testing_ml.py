@@ -4,50 +4,81 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 
-# Load the datasets
+# Function to oversample the minority class
+def oversample_minority_class(df, target_column):
+    # Separate majority and minority classes
+    majority_class = df[df[target_column] == 0]
+    minority_class = df[df[target_column] == 1]
+
+    # Calculate the number of samples to duplicate
+    num_samples_to_add = len(majority_class) - len(minority_class)
+
+    # Duplicate the minority class rows
+    minority_class_oversampled = minority_class.sample(n=num_samples_to_add, replace=True, random_state=42)
+
+    # Combine the original data with the oversampled minority class
+    df_oversampled = pd.concat([df, minority_class_oversampled], axis=0).reset_index(drop=True)
+
+    return df_oversampled
+
+# Load the dataset
 tested_data = pd.read_csv('sorted_tested_molecules.csv')
-untested_data = pd.read_csv('untested_molecules-3.csv')
 
 # Drop rows with NaN values
 tested_data = tested_data.dropna()
 
+# Oversample the minority class for PKM2 inhibition
+tested_data_PKM2 = oversample_minority_class(tested_data[[ 'PKM2_inhibition']], 'PKM2_inhibition')
+
+# Oversample the minority class for ERK2 inhibition
+tested_data_ERK2 = oversample_minority_class(tested_data[[ 'ERK2_inhibition']], 'ERK2_inhibition')
+
+# Merge the oversampled data with the original descriptors
+tested_data_PKM2 = tested_data_PKM2.merge(tested_data.drop(columns=['PKM2_inhibition', 'ERK2_inhibition']) )
+tested_data_ERK2 = tested_data_ERK2.merge(tested_data.drop(columns=['PKM2_inhibition', 'ERK2_inhibition']))
+
 # Split the data into features and targets for PKM2
-X_PKM2 = tested_data.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
-y_PKM2 = tested_data['PKM2_inhibition']
+X_PKM2 = tested_data_PKM2.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
+y_PKM2 = tested_data_PKM2['PKM2_inhibition']
 
 # Split the data into features and targets for ERK2
-X_ERK2 = tested_data.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
-y_ERK2 = tested_data['ERK2_inhibition']
+X_ERK2 = tested_data_ERK2.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
+y_ERK2 = tested_data_ERK2['ERK2_inhibition']
+
+# Split into training and test sets for PKM2
+X_train_PKM2, X_test_PKM2, y_train_PKM2, y_test_PKM2 = train_test_split(X_PKM2, y_PKM2, test_size=0.2, random_state=42)
+
+# Split into training and test sets for ERK2
+X_train_ERK2, X_test_ERK2, y_train_ERK2, y_test_ERK2 = train_test_split(X_ERK2, y_ERK2, test_size=0.2, random_state=42)
 
 # Train a linear regression model for PKM2
 lr_model_PKM2 = LinearRegression()
-lr_model_PKM2.fit(X_PKM2, y_PKM2)
+lr_model_PKM2.fit(X_train_PKM2, y_train_PKM2)
 
 # Train a linear regression model for ERK2
 lr_model_ERK2 = LinearRegression()
-lr_model_ERK2.fit(X_ERK2, y_ERK2)
+lr_model_ERK2.fit(X_train_ERK2, y_train_ERK2)
 
 # Evaluate the model for PKM2
-y_pred_PKM2 = lr_model_PKM2.predict(X_PKM2)
+y_pred_PKM2 = lr_model_PKM2.predict(X_test_PKM2)
 print("PKM2 Linear Regression Metrics")
-print("Mean Squared Error:", mean_squared_error(y_PKM2, y_pred_PKM2))
-print("R2 Score:", r2_score(y_PKM2, y_pred_PKM2))
+print("Mean Squared Error:", mean_squared_error(y_test_PKM2, y_pred_PKM2))
+print("R2 Score:", r2_score(y_test_PKM2, y_pred_PKM2))
 
 # Evaluate the model for ERK2
-y_pred_ERK2 = lr_model_ERK2.predict(X_ERK2)
+y_pred_ERK2 = lr_model_ERK2.predict(X_test_ERK2)
 print("ERK2 Linear Regression Metrics")
-print("Mean Squared Error:", mean_squared_error(y_ERK2, y_pred_ERK2))
-print("R2 Score:", r2_score(y_ERK2, y_pred_ERK2))
-
+print("Mean Squared Error:", mean_squared_error(y_test_ERK2, y_pred_ERK2))
+print("R2 Score:", r2_score(y_test_ERK2, y_pred_ERK2))
+'''
 # Prepare the untested data for prediction
-X_untested = untested_data.drop(columns=['SMILES','PKM2_inhibition', 'ERK2_inhibition'])
+untested_data = pd.read_csv('/mnt/data/untested_molecules-3.csv')
+X_untested = untested_data.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
 
 # Make predictions on untested molecules
-untested_data['PKM2_inhibition_predicted'] = lr_model_PKM2.predict(X_untested)
-untested_data['ERK2_inhibition_predicted'] = lr_model_ERK2.predict(X_untested)
+untested_data['PKM2_inhibition'] = lr_model_PKM2.predict(X_untested)
+untested_data['ERK2_inhibition'] = lr_model_ERK2.predict(X_untested)
 
 # Save predictions to a CSV file
-untested_data.to_csv('untested_molecules-predict', index=False)
-
-
-
+untested_data.to_csv('/mnt/data/untested_molecules_predictions.csv', index=False)
+'''
