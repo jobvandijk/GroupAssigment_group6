@@ -55,7 +55,7 @@ print("ERK2 ROC AUC Score:", roc_auc_score(y_test_ERK2, y_pred_ERK2))
 
 # Load untested molecules
 untested_molecules = pd.read_csv('untested_molecules-3.csv')
-X_untested = untested_molecules.drop(columns=['PKM2_inhibition', 'ERK2_inhibition'])
+X_untested = untested_molecules.drop(columns=["SMILES",'PKM2_inhibition', 'ERK2_inhibition'])
 
 # Make predictions on untested molecules
 untested_molecules['PKM2_inhibition_predict'] = rf_model_PKM2.predict(X_untested)
