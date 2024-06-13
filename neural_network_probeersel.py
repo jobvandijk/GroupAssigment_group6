@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import rdkit
+import random as rnd
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -13,7 +14,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, Dropout, Input
-from tensorflow.keras.metrics import Precision, Recall
+from tensorflow.keras.metrics import Precision, Recall, F1Score
 import logging
 
 tf.get_logger().setLevel(logging.ERROR)
@@ -24,6 +25,27 @@ def read_file(file_dir):
     input_df = pd.read_csv(file_dir)
 
     return input_df
+
+
+def write_file(data, output_file):
+
+    data.to_csv(output_file, index=False)
+
+
+def format_output(predictions, df):
+
+    smiles_and_vals = df[['SMILES', 'PKM2_inhibition', 'ERK2_inhibition']].copy()
+
+    predict_PKM2 = predictions[0]
+    predict_ERK2 = predictions[1]
+
+    prediction_array = np.column_stack((predict_PKM2, predict_ERK2))
+
+    predictions_df = pd.DataFrame(prediction_array, columns=['PKM2_predictions', 'ERK2_predictions'])
+
+    output_df = pd.concat([smiles_and_vals, predictions_df], axis=1)
+
+    return output_df
 
 
 def split_data(df):
@@ -38,88 +60,19 @@ def split_data(df):
     return descriptor_array, outputs_array
 
 
-# def train_classifier_network(descriptor_array, outputs_array):
+def line_multiplication_class_balancing(df, dupe_amount):
 
-#     y_PKM2 = outputs_array[:,0]
-#     y_ERK2 = outputs_array[:,1]
+    ones_filter = (df['PKM2_inhibition'] == 1) | (df['ERK2_inhibition'] == 1)
 
-#     network = MLPClassifier(hidden_layer_sizes=(100,50), activation='relu', solver='adam', max_iter=500, random_state=10, 
-#                             early_stopping=True, n_iter_no_change=25, momentum=0.9, class_weight='balanced_subsample')
+    filtered_df = df[ones_filter]
 
-#     kfold = StratifiedKFold(n_splits=10)
+    random_selection = np.random.choice(filtered_df.index, size=dupe_amount, replace=True)
+    duped_rows = df.loc[random_selection]
 
-#     acc_PKM2 = []
-#     acc_ERK2 = []
-#     prec_PKM2 = []
-#     prec_ERK2 = []
-#     recal_PKM2 = []
-#     recal_ERK2 = []
-#     f1_PKM2 = []
-#     f1_ERK2 = []
+    # "balanced"
+    balanced_df = pd.concat([df,duped_rows], ignore_index=True)
 
-#     for train_index, val_index in kfold.split(descriptor_array, y_PKM2):
-        
-#         # First binary descision
-#         descr_train, descr_val = descriptor_array[train_index], descriptor_array[val_index]
-#         PKM2_train, PKM2_val = y_PKM2[train_index], y_PKM2[val_index]
-
-#         network.fit(descr_train, PKM2_train)
-
-#         predict_PKM2 = network.predict(descr_val)
-
-#         acc_PKM2_prediction = accuracy_score(PKM2_val, predict_PKM2)
-#         acc_PKM2.append(acc_PKM2_prediction)
-
-#         prec_PKM2_prediction = precision_score(PKM2_val, predict_PKM2)
-#         prec_PKM2.append(prec_PKM2_prediction)
-
-#         recall_PKM2_prediction = recall_score(PKM2_val, predict_PKM2)
-#         recal_PKM2.append(recall_PKM2_prediction)
-
-#         f1_PKM2_prediction = f1_score(PKM2_val, predict_PKM2)
-#         f1_PKM2.append(f1_PKM2_prediction)
-
-#         # Second binary decision
-#         descr_train, descr_val = descriptor_array[train_index], descriptor_array[val_index]
-#         ERK2_train, ERK2_val = y_ERK2[train_index], y_ERK2[val_index]
-
-#         network.fit(descr_train, ERK2_train)
-
-#         predict_ERK2 = network.predict(descr_val)
-
-#         acc_ERK2_prediction = accuracy_score(ERK2_val, predict_ERK2)
-#         acc_ERK2.append(acc_ERK2_prediction)
-
-#         prec_ERK2_prediction = precision_score(ERK2_val, predict_ERK2)
-#         prec_ERK2.append(prec_ERK2_prediction)
-
-#         recall_ERK2_prediction = recall_score(ERK2_val, predict_ERK2)
-#         recal_ERK2.append(recall_ERK2_prediction)
-
-#         f1_ERK2_prediction = f1_score(ERK2_val, predict_ERK2)
-#         f1_ERK2.append(f1_ERK2_prediction)
-
-#     mean_acc_PKM2 = np.mean(acc_PKM2)
-#     mean_prec_PKM2 = np.mean(prec_PKM2)
-#     mean_recal_PKM2 = np.mean(recal_PKM2)
-#     mean_f1_PKM2 = np.mean(f1_PKM2)
-
-#     mean_acc_ERK2 = np.mean(acc_ERK2)
-#     mean_prec_ERK2 = np.mean(prec_ERK2)
-#     mean_recal_ERK2 = np.mean(recal_ERK2)
-#     mean_f1_ERK2 = np.mean(f1_ERK2)    
-
-#     print("Metrics PRK2:")
-#     print("Mean accuracy: ", mean_acc_PKM2)
-#     print("Mean precision: ", mean_prec_PKM2)
-#     print("Mean recall: ", mean_recal_PKM2)
-#     print("Mean f1 score: ", mean_f1_PKM2)
-
-#     print("Metrics ERK2:")
-#     print("Mean accuracy: ", mean_acc_ERK2)
-#     print("Mean precision: ", mean_prec_ERK2)
-#     print("Mean recall: ", mean_recal_ERK2)
-#     print("Mean f1 score: ", mean_f1_ERK2)    
+    return balanced_df
 
 
 def tensorflow_model(input_shape):
@@ -128,14 +81,14 @@ def tensorflow_model(input_shape):
 
     input_layer = Input(shape=input_shape)
     
-    first_dense = Dense(64, activation='relu')(input_layer)
+    first_dense = Dense(64, activation='relu', kernel_initializer='he_normal')(input_layer)
     first_drop = Dropout(0.3)(first_dense)
     
-    second_dense = Dense(32, activation='relu')(first_drop)
+    second_dense = Dense(32, activation='relu', kernel_initializer='he_normal')(first_drop)
     second_drop = Dropout(0.3)(second_dense)
     
-    output1 = Dense(1, activation='sigmoid', name='out1')(second_drop)
-    output2 = Dense(1, activation='sigmoid', name='out2')(second_drop)
+    output1 = Dense(1, activation='sigmoid', kernel_initializer='glorot_uniform', name='out1')(second_drop)
+    output2 = Dense(1, activation='sigmoid', kernel_initializer='glorot_uniform', name='out2')(second_drop)
 
     model = Model(inputs=input_layer, outputs=[output1, output2])
 
@@ -153,33 +106,56 @@ def train_model(descriptor_array, outputs_array):
     outp_train_split = [outp_train[:,0], outp_train[:,1]]
     outp_val_split = [outp_val[:,0], outp_val[:,1]]
 
-    training_history = model.fit(descr_train, outp_train_split, epochs=25, batch_size=16, validation_data=(descr_val, outp_val_split), verbose=0)
+    training_history = model.fit(descr_train, outp_train_split, epochs=100, batch_size=32, validation_data=(descr_val, outp_val_split), verbose=0)
         
     evaluation = model.evaluate(descr_val, outp_val_split)
 
-    #print("Validation loss: ", loss)
-    # print("Binary validation accuracy: ", bin_acc)
-    # print("Validation precision: ", prec)
-    # print("Validation recall: ", recal)
+    predictions = model.predict(descriptor_array)  
 
-    print("\n", evaluation)
-    print("\n", "Number of 0 in PKM2: ", np.count_nonzero(outputs_array[:,0] == 0), " so percentage of 0 in PKM2 is: ", np.count_nonzero(outputs_array[:,0] == 0)/outputs_array.shape[0])
+    f1_score_PKM2 = f1_score(outputs_array[:,0], np.round(predictions[0]).astype(int))
+    f1_score_ERK2 = f1_score(outputs_array[:,1], np.round(predictions[1]).astype(int))
+
+    print("\n", evaluation, "\n")
+    print("Accuracy PKM2: ", evaluation[3])
+    print("Precision PKM2: ", evaluation[4])
+    print("Recall PKM2: ", evaluation[5])
+    print("F1 score PKM2: ", f1_score_PKM2)
+    print("Number of 0 in PKM2: ", np.count_nonzero(outputs_array[:,0] == 0), " so percentage of 0 in PKM2 is: ", np.count_nonzero(outputs_array[:,0] == 0)/outputs_array.shape[0])
     print("Number of 1 in PKM2: ", np.count_nonzero(outputs_array[:,0] == 1), " so percentage of 1 in PKM2 is: ", np.count_nonzero(outputs_array[:,0] == 1)/outputs_array.shape[0])
+    print("Number of predicted PKM2 1s: ", np.count_nonzero(predictions[0] == 1), "\n")
+    print("Accuracy ERK2: ", evaluation[6])
+    print("Precision ERK2: ", evaluation[7])
+    print("Recall ERK2: ", evaluation[8])
+    print("F1 score ERK2: ", f1_score_ERK2)
     print("Number of 0 in ERK2: ", np.count_nonzero(outputs_array[:,1] == 0), " so percentage of 0 in ERK2 is: ", np.count_nonzero(outputs_array[:,1] == 0)/outputs_array.shape[0])
     print("Number of 1 in ERK2: ", np.count_nonzero(outputs_array[:,1] == 1), " so percentage of 1 in ERK2 is: ", np.count_nonzero(outputs_array[:,1] == 1)/outputs_array.shape[0])
+    print("Number of predicted PKM2 1s: ", np.count_nonzero(predictions[1] == 1))
+
+    return predictions 
 
 
-def main_struct(input_file):
+def main_struct(input_file, output_file):
 
     df = read_file(input_file)
+
+    dupe_amount = 2000
+
+    balanced_df = line_multiplication_class_balancing(df, dupe_amount)
+
+    # print(balanced_df.head())
     
-    descr_arr, outp_arr = split_data(df)
+    print("nr of rows in new df:", balanced_df.shape[0])
 
-    #find_string_columns(outp_arr)
+    descr_arr, outp_arr = split_data(balanced_df)
 
-    train_model(descr_arr, outp_arr)
+    predictions = train_model(descr_arr, outp_arr)
+
+    output_data = format_output(predictions, balanced_df)
+
+    write_file(output_data, output_file)
 
 
 input_file_loc = "tested_molecules.csv"
+output_file_loc = "neural_network_predictions.csv"
 descriptor_file = r""
-main_struct(input_file_loc)
+main_struct(input_file_loc, output_file_loc)
