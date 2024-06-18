@@ -1,12 +1,14 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import random as rnd
 import ast
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 from sklearn.utils import class_weight
+from sklearn.metrics import confusion_matrix
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
@@ -84,6 +86,56 @@ def plot_network_loss_progression(train_history):
     plt.show()
 
 
+def balanced_accuracy_score(y_true, y_pred):
+    cm = confusion_matrix(y_true, y_pred)
+    num_classes = cm.shape[0]
+    sensitivities = []
+ 
+    for i in range(num_classes):
+        true_positives = cm[i, i]
+        actual_positives = cm[i, :].sum()
+        sensitivity = true_positives / actual_positives
+        sensitivities.append(sensitivity)
+ 
+    balanced_accuracy = sum(sensitivities) / num_classes
+    return balanced_accuracy
+ 
+ 
+def cm_plot(y_true, y_pred, class_name):
+    # Confusion Matrix for PKM2 inhibition
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(10, 4))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title("Confusion Matrix for "+ class_name + " inhibition")
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_confusion_matrix(predictions, outp_val, mol_name='', single=False):
+
+    if single==True:
+        y_pred = predictions
+        y_true = outp_val
+        print("Balanced Accuracy:", balanced_accuracy_score(y_true, y_pred))
+        print("Confusion Matrix:", cm_plot(y_true, y_pred, class_name=mol_name))
+
+    else:        
+        y_pred_PKM2 = predictions[:, 0]
+        y_pred_ERK2 = predictions[:, 1]
+        
+        y_true_PKM2 = outp_val[:,0]
+        y_true_ERK2 = outp_val[:,1]  
+
+        print("Balanced Accuracy:", balanced_accuracy_score(y_true_PKM2, y_pred_PKM2))
+        print("Balanced Accuracy:", balanced_accuracy_score(y_true_ERK2, y_pred_ERK2))    
+        
+        
+        print("Confusion Matrix:", cm_plot(y_true_PKM2, y_pred_PKM2, class_name='PKM2'))
+        print("Confusion Matrix:", cm_plot(y_true_ERK2, y_pred_ERK2, class_name="ERK2"))
+
+
 def tensorflow_model_individual(input_shape):
     # Creates the model architecture for the method of creating an individual model for
     # each of the 2 outputs.
@@ -101,7 +153,7 @@ def tensorflow_model_individual(input_shape):
     return model
 
 
-def train_model_individual(descriptor_array, outputs_array, mol_name, balance_weights=[], plot_loss=False):
+def train_model_individual(descriptor_array, outputs_array, untested_data, mol_name='', balance_weights=[], plot_loss=False, plot_conf_mat=False):
     # Trains and evaluates the model for the method of creating separate networks for both outputs.    
 
     model = tensorflow_model_individual(descriptor_array.shape)
@@ -124,7 +176,16 @@ def train_model_individual(descriptor_array, outputs_array, mol_name, balance_we
     evaluation = model.evaluate(descr_val, outp_val)
 
     predictions = model.predict(descr_val) 
-    predictions = np.round(predictions).astype(int)
+    predictions = np.round(predictions).astype(int)  
+
+    print("descriptor array:",descriptor_array.shape)
+    print("untested array:", untested_data.shape)
+
+    untested_predictions = model.predict(untested_data)
+    untested_predictions = np.round(predictions).astype(int)
+
+    if plot_conf_mat == True:
+        plot_confusion_matrix(predictions, outp_val, mol_name, single=True)   
 
     f1_score_val = f1_score(outp_val, np.round(predictions).astype(int))
 
@@ -147,13 +208,14 @@ def train_model_individual(descriptor_array, outputs_array, mol_name, balance_we
     if plot_loss == True:
         plot_network_loss_progression(training_history)
 
-    return predictions 
+    return predictions, untested_predictions
 
 
-def main_struct_individual(input_file, output_file, balance_weights=False, plot_loss=False, MACCS=False, write_output=False):
+def main_struct_individual(input_train_file, input_test_file, output_file, balance_weights=[], plot_loss=False, MACCS=False, write_output=False, plot_conf_mat=False):
     # Main structure for the method of individual networks.
 
-    df = read_file(input_file)
+    df = read_file(input_train_file)
+    untested_df = read_file(input_test_file)
 
     output_cols = ['PKM2_inhibition', 'ERK2_inhibition']
     mol_col = ['SMILES']
@@ -161,25 +223,32 @@ def main_struct_individual(input_file, output_file, balance_weights=False, plot_
     if balance_weights[0] == False:
         dupe_amount = balance_weights[1]
         balanced_df = line_multiplication_class_balancing(df, dupe_amount)    
-    else:
+    elif balance_weights[0] == True:
         balanced_df = df
 
     if MACCS == True:
-        maccs_keys_string_to_list = [ast.literal_eval(string_list) for string_list in df["maccs_keys_bitstring"]]
+        maccs_keys_string_to_list = [ast.literal_eval(string_list) for string_list in balanced_df["maccs_keys_bitstring"]]
         descr_arr = np.array(maccs_keys_string_to_list)
-        outp_arr = np.array(df[["PKM2_inhibition", "ERK2_inhibition"]].values.tolist())
-    else:
+        outp_arr = np.array(balanced_df[["PKM2_inhibition", "ERK2_inhibition"]].values.tolist())
+
+        untested_maccs_convert = [ast.literal_eval(string_list) for string_list in untested_df["maccs_keys_bitstring"]]
+        untested_descr_arr = np.array(untested_maccs_convert)
+        untested_outp_arr = np.array(untested_df[["PKM2_inhibition", "ERK2_inhibition"]].values.tolist())
+
+    elif MACCS == False:
         descr_arr, outp_arr = split_data(balanced_df, output_cols, mol_col)
+        untested_descr_arr, untested_outp_arr = split_data(untested_df, output_cols, mol_col)
 
     pkm2_output = outp_arr[:,0]
     erk2_output = outp_arr[:,1]
 
-    predictions_PKM2 = train_model_individual(descr_arr, pkm2_output, 'PKM2', balance_weights[0], plot_loss)
-    predictions_ERK2 = train_model_individual(descr_arr, erk2_output, 'ERK2', balance_weights[0], plot_loss)
+    predictions_PKM2, untested_predictions_PKM2 = train_model_individual(descr_arr, pkm2_output, untested_descr_arr, mol_name='PKM2', balance_weights=balance_weights[0], plot_loss=True, plot_conf_mat=True)
+    predictions_ERK2, untested_predictions_ERK2 = train_model_individual(descr_arr, erk2_output, untested_descr_arr, mol_name='ERK2', balance_weights=balance_weights[0], plot_loss=True, plot_conf_mat=True)
 
-    predictions = np.column_stack((predictions_PKM2, predictions_ERK2))
+    predictions = np.column_stack((predictions_PKM2, predictions_ERK2))  
+    untested_predictions = np.column_stack((untested_predictions_PKM2, untested_predictions_ERK2)) 
 
-    output_data = format_output(predictions, balanced_df, output_cols)
+    output_data = format_output(untested_predictions, untested_df, output_cols)
 
     if write_output==True:
         write_file(output_data, output_file)
@@ -243,7 +312,7 @@ def tensorflow_model_four_classes(input_shape, n_classes):
     return model
 
 
-def train_model_four_classes(descriptor_array, outputs_array, balance_weights=False, plot_loss=False):
+def train_model_four_classes(descriptor_array, outputs_array, untested_descr, balance_weights=False, plot_loss=False, plot_conf_mat=False):
 
     n_classes = 4
     outputs_array_cat = to_categorical(outputs_array, num_classes=n_classes)
@@ -255,6 +324,9 @@ def train_model_four_classes(descriptor_array, outputs_array, balance_weights=Fa
     early_stopping = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
 
     balancing_weights = class_weight.compute_class_weight(class_weight='balanced', classes=np.unique(outputs_array), y=outputs_array)
+    balancing_weights[1] = balancing_weights[1]/2
+    balancing_weights[2] = balancing_weights[2]/2
+    balancing_weights[3] = balancing_weights[3]/2
     balancing_weights_dict = dict(enumerate(balancing_weights))
 
     if balance_weights == True:
@@ -267,9 +339,16 @@ def train_model_four_classes(descriptor_array, outputs_array, balance_weights=Fa
 
     evaluation = model.evaluate(descr_val, outp_val)
 
-    predictions = model.predict(descriptor_array) 
-
+    predictions = model.predict(descr_val)
     class_predictions = np.argmax(predictions, axis=1)
+
+    untested_predictions = model.predict(untested_descr)
+    untested_predictions = np.argmax(untested_predictions, axis=1)
+
+    if plot_conf_mat == True:
+        two_class_outp_val = convert_four_to_two_classes(outp_val)
+        two_class_pred = convert_four_to_two_classes(class_predictions)
+        plot_confusion_matrix(two_class_pred, two_class_outp_val)
 
     if early_stopping.stopped_epoch == None or early_stopping.stopped_epoch == 0:
         best_epoch = 200
@@ -303,15 +382,18 @@ def train_model_four_classes(descriptor_array, outputs_array, balance_weights=Fa
     if plot_loss == True:
         plot_network_loss_progression(training_history)
 
-    return class_predictions
+    return class_predictions, untested_predictions
 
 
-def main_struct_four_class(input_file, output_file,  balance_weights=[], plot_loss=False, MACCS=False, write_output=False):
+def main_struct_four_class(input_file, input_test_file, output_file,  balance_weights=[], plot_loss=False, MACCS=False, write_output=False, plot_conf_mat=False):
 
     df = read_file(input_file)
+    untested_df = read_file(input_test_file)
 
     output_cols = ['PKM2_inhibition', 'ERK2_inhibition']
     mol_col = ['SMILES']
+
+    untested_descr = split_data(untested_df, output_cols, mol_col)
 
     if balance_weights[0]==False:
         dupe_amount = balance_weights[1]
@@ -329,11 +411,12 @@ def main_struct_four_class(input_file, output_file,  balance_weights=[], plot_lo
 
     four_class_data = convert_two_to_four_classes(outp_arr)
 
-    four_class_predictions = train_model_four_classes(descr_arr, four_class_data, balance_weights[0], plot_loss)
+    four_class_predictions, four_class_untested_predictions = train_model_four_classes(descr_arr, four_class_data, untested_descr, balance_weights=balance_weights[0], plot_loss=plot_loss, plot_conf_mat=plot_conf_mat)
 
-    two_class_predictions = convert_four_to_two_classes(four_class_predictions)
+    two_class_predictions = convert_four_to_two_classes(four_class_predictions) 
+    two_class_untested_pred = convert_four_to_two_classes(four_class_untested_predictions)
 
-    output_data = format_output(two_class_predictions, balanced_df, output_cols, mol_col)
+    output_data = format_output(two_class_untested_pred, untested_df, output_cols, mol_col)
 
     if write_output==True:
         write_file(output_data, output_file)
