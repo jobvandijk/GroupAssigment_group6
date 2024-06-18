@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import random as rnd
 import ast
 
 from sklearn.model_selection import train_test_split
@@ -11,14 +10,11 @@ from sklearn.utils import class_weight
 from sklearn.metrics import confusion_matrix
 
 import tensorflow as tf
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Dense, Dropout, Input
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.metrics import Precision, Recall
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.utils import to_categorical
-import logging
-
-tf.get_logger().setLevel(logging.ERROR)
 
 
 def read_file(file_dir):
