@@ -179,7 +179,7 @@ def train_model_individual(descriptor_array, outputs_array, untested_data, mol_n
     predictions = np.round(predictions).astype(int)  
 
     untested_predictions = model.predict(untested_data)
-    untested_predictions = np.round(predictions).astype(int)
+    untested_predictions = np.round(untested_predictions).astype(int)
 
     if early_stopping.stopped_epoch == None or early_stopping.stopped_epoch == 0:
         best_epoch = 200
@@ -213,11 +213,8 @@ def train_model_individual(descriptor_array, outputs_array, untested_data, mol_n
     return predictions, untested_predictions
 
 
-def main_struct_individual(input_train_file, input_test_file, output_file, balance_weights=[], plot_loss=False, MACCS=False, write_output=False, plot_conf_mat=False, seed_val=10):
+def main_struct_individual(input_train_file, input_test_file, output_file, balance_weights=[], plot_loss=False, MACCS=False, write_output=False, plot_conf_mat=False):
     # Main structure for the method of individual networks.
-
-    np.random.seed(seed_val)
-    tf.random.set_seed(seed_val)
 
     df = read_file(input_train_file)
     untested_df = read_file(input_test_file)
@@ -396,10 +393,7 @@ def train_model_four_classes(descriptor_array, outputs_array, untested_descr, ba
     return class_predictions, untested_predictions
 
 
-def main_struct_four_class(input_file, input_test_file, output_file,  balance_weights=[], plot_loss=False, MACCS=False, write_output=False, plot_conf_mat=False, seed_val=10):
-
-    np.random.seed(seed_val)
-    tf.random.set_seed(seed_val)
+def main_struct_four_class(input_file, input_test_file, output_file,  balance_weights=[], plot_loss=False, MACCS=False, write_output=False, plot_conf_mat=False):
 
     df = read_file(input_file)
     untested_df = read_file(input_test_file)
